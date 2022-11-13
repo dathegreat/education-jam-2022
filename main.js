@@ -45,9 +45,10 @@ const addVectors = (a, b) =>{
 }
 
 class Vector{
-    constructor(x, y){
+    constructor(x, y, rgba=null){
         this.x = x
         this.y = y
+        this.rgba = rgba
         this.magnitude = Math.sqrt(
             Math.pow(this.x, 2) + Math.pow(this.y, 2)
         )
@@ -66,11 +67,12 @@ class Vector{
 }
 
 class Matrix{
-    constructor(vectors){
+    constructor(vectors, rgba=[0,0,0,0]){
         this.rows = []
         vectors.forEach((row)=>{
             this.rows.push(row)
         })
+        this.pixel = rgba
     }
 
     getTranspose(){
@@ -166,7 +168,7 @@ const animateTransform = (frameMatrix) =>{
         setTimeout(()=>{
             fillCanvas("white")
             //console.log("drawing", matrix)
-            drawGrid(matrix)
+            drawImageFromMatrix(frameMatrix)
         }, 1000/frameRate)
     })
 
@@ -189,25 +191,77 @@ const handleMatrixInput = () =>{
 const drawTransform = () =>{
     const steps = 1000
     const transformationMatrix = handleMatrixInput()
-    const transformedMatrix = transformMatrix(grid, transformationMatrix)
-    const tweened00 = tweenValues(grid.rows[0].x, transformedMatrix.rows[0].x, steps)
-    const tweened01 = tweenValues(grid.rows[0].y, transformedMatrix.rows[0].y, steps)
-    const tweened10 = tweenValues(grid.rows[1].x, transformedMatrix.rows[1].x, steps)
-    const tweened11 = tweenValues(grid.rows[1].y, transformedMatrix.rows[1].y, steps)
+    const canvasPixels = getCanvasPixels()
+    const canvasMatrix = pixelsToMatrix(canvasPixels)
+    const transformedMatrix = transformMatrix(canvasMatrix, transformationMatrix)
+    // const tweened00 = tweenValues(grid.rows[0].x, transformedMatrix.rows[0].x, steps)
+    // const tweened01 = tweenValues(grid.rows[0].y, transformedMatrix.rows[0].y, steps)
+    // const tweened10 = tweenValues(grid.rows[1].x, transformedMatrix.rows[1].x, steps)
+    // const tweened11 = tweenValues(grid.rows[1].y, transformedMatrix.rows[1].y, steps)
     let tweenedMatrices = []
-    for(let i=0; i<tweened00.length; i++){
-        tweenedMatrices.push(
-            new Matrix([
-                new Vector(tweened00[i], tweened01[i]),
-                new Vector(tweened10[i], tweened11[i])
-            ])
-        )
+    for(let i=0; i<transformedMatrix.rows.length; i++){
+        const tweenX = tweenValues(canvasMatrix.rows[i].x, transformedMatrix.rows[i].x, steps)
+        const tweenY = tweenValues(canvasMatrix.rows[i].y, transformedMatrix.rows[i].y, steps)
+        tweenedMatrices.push( new Vector(tweenX, tweenY) )
+    }
+    console.log(tweenedMatrices)
+    animateTransform(new Matrix(tweenedMatrices) )
+    
+}
+
+const drawImageFromFile = (source) =>{
+    const canvas = document.getElementById("canvas")
+    const ctx = canvas.getContext("2d")
+    const image = new Image()
+    image.src= source
+    image.onload = () =>{
+        ctx.drawImage(image, 0, 0)
+        const pixelMatrix = pixelsToMatrix()
+        drawImageFromMatrix(pixelMatrix)
     }
     
-    
-    //console.log("drew", tweenedMatrices, "transformation", transformationMatrix, "transformed", transformedMatrix)
-    animateTransform(tweenedMatrices)
-    
+}
+
+const getCanvasPixels = () =>{
+    const canvas = document.getElementById("canvas")
+    const ctx = canvas.getContext("2d")
+    const imageData = ctx.getImageData(0,0,canvasSize,canvasSize)
+    return imageData
+}
+
+const pixelsToMatrix = () =>{
+    imageData = getCanvasPixels()
+    tempVectorArray = []
+    for(let i=0; i<imageData.data.length; i+=4){
+        const pixelX = (i / 4) % imageData.width
+        const pixelY = Math.floor( (i / 4) / imageData.height )
+        tempVectorArray.push(
+            new Vector(
+                pixelX, 
+                pixelY, 
+                [   imageData.data[i],
+                    imageData.data[i+1],
+                    imageData.data[i+2],
+                    imageData.data[i+3]
+                ]
+            )
+        )
+    }
+    return new Matrix(tempVectorArray)
+}
+
+const drawImageFromMatrix = (matrix) =>{
+    const canvas = document.getElementById("canvas")
+    const ctx = canvas.getContext("2d")
+    const imageDataObject = ctx.createImageData(canvasSize, canvasSize)
+    matrix.rows.map((vector)=>{
+        const index = 4 * (vector.x + (canvasSize * vector.y))
+        imageDataObject.data[index] = vector.rgba[0]
+        imageDataObject.data[index + 1] = vector.rgba[1]
+        imageDataObject.data[index + 2] = vector.rgba[2]
+        imageDataObject.data[index + 3] = vector.rgba[3]
+    })
+    ctx.putImageData(imageDataObject, 0, 0)
 }
 
 document.getElementById("canvas").height = canvasSize
@@ -218,4 +272,4 @@ const grid = new Matrix([
     new Vector(0, scale)
     ])
 
-drawGrid(grid)
+drawImageFromFile("palm.png")
