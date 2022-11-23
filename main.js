@@ -9,37 +9,35 @@ const getContext = () =>{
     return ctx
 }
 
+const dotVectors = (a, b) =>{
+    //takes two 2x1 vectors
+    //returns a scalar
+    return ( (a.x * b.x) + (a.y * b.y) )
+}
+
 const transformVector = (a, b) =>{
     //takes a 2x2 transformation matrix and a 2x1 vector
-    //returns a 2x1 vector
-    let product = []
-    a.rows.forEach((v)=>
-        product.push( (v.x * b.x) + (v.y * b.y) )
+    //returns  2x2 vector
+    //math.floor values to prevent sub-pixel calculations
+    return (new Vector(
+        [Math.floor(dotVectors(a.rows[0], b)),
+         Math.floor(dotVectors(a.rows[1], b))],  
+        b.rgba
+        )
     )
-    
-    return new Vector([product[0], product[1]], b.rgba)
 }
 
 const transformMatrix = (a, b) =>{
-    //takes an nx2 transformation matrix and a nx2 matrix
+    //takes a 2x2 transformation matrix and an nx2 matrix
     //returns an nx2 matrix
-    let product = []
-    const bt = b.getTranspose()
-    console.log(a, b, bt)
-    for(let i=0; i<a.rows.length; i++){
-        let vector = []
-        for(let j=0; j<bt.rows.length; j++){
-            vector.push( 
-                (a.rows[i].x * bt.rows[j].x) + (a.rows[i].y * bt.rows[j].y)
-            )
-        }
-        product.push(new Vector([vector[0], vector[1]], b.rows[0].rgba))
-    } 
-    
-    return new Matrix(product)
+    const transformedArray = b.rows.map((vector)=>{
+        return transformVector(a, vector)
+    })
+
+    return new Matrix( transformedArray)
 }
 
-const multiplyVectors = (a, b) =>{
+const scaleVectors = (a, b) =>{
     //takes a vector and a scalar
     //returns a 2x1 vector
     return ( new Vector(
@@ -74,7 +72,7 @@ class Vector{
     }
     getNormal(){
         return(
-            transformVector(
+            dotVectors(
                 new Matrix([
                     new Vector([0, -1]),
                     new Vector([1, 0])
@@ -121,9 +119,9 @@ const drawVector = (vector, start= new Vector([0,0]) ) =>{
     // const ctx = canvas.getContext("2d")
     const thickness = 10
     const tip = addVectors(vector, start)
-    const unitNormal = multiplyVectors(vector.getNormal(), 1/vector.magnitude)
-    const scaledNormal = multiplyVectors(unitNormal, thickness)
-    const scaledVector = multiplyVectors(vector, 0.9)
+    const unitNormal = scaleVectors(vector.getNormal(), 1/vector.magnitude)
+    const scaledNormal = scaleVectors(unitNormal, thickness)
+    const scaledVector = scaleVectors(vector, 0.9)
     const scaledTip = addVectors(scaledVector, start)
     const arrowTop = addVectors(
         scaledTip, 
@@ -131,7 +129,7 @@ const drawVector = (vector, start= new Vector([0,0]) ) =>{
     )
     const arrowBottom = addVectors(
         scaledTip, 
-        multiplyVectors(scaledNormal, -1)
+        scaleVectors(scaledNormal, -1)
     )
     //draw vector
     ctx.lineWidth = thickness
@@ -196,51 +194,55 @@ const tweenVectors = (a, b, steps) =>{
     return new Matrix( tweenedVectors )
 }
 
-const animateTransform = (frameMatrix) =>{
+const animateTransform = (frameArray) =>{
     //iterate through tweened frames array and draw them
-    const frameRate = 30
-    frameMatrix.forEach((matrix)=>{
+    const frameRate = 24
+    for(let i=0; i<frameArray.length; i++){
         setTimeout(()=>{
             clearCanvas("white")
-            drawImageFromMatrix(matrix)
+            drawImageFromMatrix(frameArray[i])
         }, 1000/frameRate)
-    })
-
+    }
 }
 
 const handleMatrixInput = () =>{
     const transformationMatrix = new Matrix([
         new Vector([
             document.getElementById("[0,0]").value,
-            document.getElementById("[1,0]").value
+            document.getElementById("[0,1]").value
         ]),
         new Vector([
-            document.getElementById("[0,1]").value,
+            document.getElementById("[1,0]").value,
             document.getElementById("[1,1]").value
         ])
     ])
     return transformationMatrix
 }
 
-const drawTransform = () =>{
+const createTransformFrames = () =>{
     //take a transformation matrix from the user and generate
     //a list of interpolated "frames" between the identity matrix
     //and the matrix with the transform applied
-    const steps = 1000
+    const steps = 100
     const transformationMatrix = handleMatrixInput()
     const canvasPixels = getCanvasPixels()
     const canvasMatrix = pixelsToMatrix(canvasPixels)
-    const transformedMatrix = transformMatrix(canvasMatrix, transformationMatrix)
-
-    let tweenedMatrices = []
-    for(let i=0; i<transformedMatrix.rows.length; i++){
-        tweenedMatrices.push( 
-            tweenVectors(canvasMatrix.rows[i], transformedMatrix.rows[i], steps)
+    //const transformedMatrix = transformMatrix(transformationMatrix, canvasMatrix)
+    const tweened00 = tweenValues(1, transformationMatrix.rows[0].array[0], steps)
+    const tweened01 = tweenValues(0, transformationMatrix.rows[0].array[1], steps)
+    const tweened10 = tweenValues(0, transformationMatrix.rows[1].array[0], steps)
+    const tweened11 = tweenValues(1, transformationMatrix.rows[1].array[1], steps)
+    let tweenedFrames = []
+    for(let i=0; i<=steps; i++){
+        const tweenedTransform = new Matrix([
+            new Vector( [tweened00[i], tweened01[i]] ),
+            new Vector( [tweened10[i], tweened11[i]] )
+        ])
+        tweenedFrames.push( 
+            transformMatrix(tweenedTransform, canvasMatrix)
         )
     }
-    // console.log(tweenedMatrices)
-    animateTransform( tweenedMatrices )
-    
+    animateTransform( tweenedFrames ) 
 }
 
 const drawImageFromFile = (source) =>{
@@ -252,11 +254,11 @@ const drawImageFromFile = (source) =>{
         ctx.drawImage(image, 0, 0)
         const pixelMatrix = pixelsToMatrix(getCanvasPixels())
         drawImageFromMatrix(pixelMatrix)
-        // const imageMat = pixelsToMatrix(getCanvasPixels())
-        // console.log(imageMat)
-        // const transformed = transformMatrix(transform1, imageMat)
-        // console.log(transformed)
-        // drawImageFromMatrix(transformed)
+        const imageMat = pixelsToMatrix(getCanvasPixels())
+        console.log(imageMat)
+        const transformed = transformMatrix(transform1, imageMat)
+        console.log(transformed)
+        drawImageFromMatrix(transformed)
     }
     
 }
@@ -304,7 +306,7 @@ const drawImageFromMatrix = (matrix) =>{
 
 document.getElementById("canvas").height = canvasSize
 document.getElementById("canvas").size = canvasSize
-document.getElementById("matrixSubmit").addEventListener("click", drawTransform)
+document.getElementById("matrixSubmit").addEventListener("click", createTransformFrames)
 const ctx = getContext()
 const grid = new Matrix([
     new Vector([scale, 0]),
@@ -314,6 +316,6 @@ const grid = new Matrix([
 drawImageFromFile("palm.png")
 
 const transform1 = new Matrix([
-    new Vector([0, 1]),
-    new Vector([-1, 0])
+    new Vector([1, 0]),
+    new Vector([0, 1])
     ])
