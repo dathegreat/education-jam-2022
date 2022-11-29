@@ -1,11 +1,13 @@
-const scale = 50
+const scale = 250
 const canvasSize = 500
+const origin = Math.floor(canvasSize / 2)
 
 const getContext = () =>{
     const canvas = document.getElementById("canvas")
     const ctx = canvas.getContext("2d", 
         {willReadFrequently : true},
         {alpha: false})
+    ctx.translate(origin, origin)
     return ctx
 }
 
@@ -50,12 +52,12 @@ const scaleVectors = (a, b) =>{
 const addVectors = (a, b) =>{
     return(
         new Vector(
-            [a.x + b.x, a.y + b.y], 
+            [a.x + b.x, a.y + b.y]
 
-            [a.rgba[0] + b.rgba[0] / 2,
-             a.rgba[1] + b.rgba[1] / 2,
-             a.rgba[2] + b.rgba[2] / 2,
-             a.rgba[3] + b.rgba[3] / 2]
+            // [a.rgba[0] + b.rgba[0] / 2,
+            //  a.rgba[1] + b.rgba[1] / 2,
+            //  a.rgba[2] + b.rgba[2] / 2,
+            //  a.rgba[3] + b.rgba[3] / 2]
         )
     )
 }
@@ -72,7 +74,7 @@ class Vector{
     }
     getNormal(){
         return(
-            dotVectors(
+            transformVector(
                 new Matrix([
                     new Vector([0, -1]),
                     new Vector([1, 0])
@@ -86,9 +88,9 @@ class Vector{
 class Matrix{
     constructor(vectors){
         this.rows = []
-        vectors.forEach((row)=>{
-            this.rows.push(row)
-        })
+        for(let i=0; i<vectors.length; i++){
+            this.rows.push(vectors[i])
+        }
     }
 
     getTranspose(){
@@ -107,16 +109,11 @@ class Matrix{
     }
 }
 
-const clearCanvas = (color) =>{
-    // const canvas = document.getElementById("canvas")
-    // const ctx = canvas.getContext("2d")
-    ctx.fillStyle = color
-    ctx.clearRect(0,0,canvasSize, canvasSize)
+const clearCanvas = () =>{
+    ctx.clearRect(-origin, -origin, canvasSize, canvasSize)
 }
 
 const drawVector = (vector, start= new Vector([0,0]) ) =>{
-    // const canvas = document.getElementById("canvas")
-    // const ctx = canvas.getContext("2d")
     const thickness = 10
     const tip = addVectors(vector, start)
     const unitNormal = scaleVectors(vector.getNormal(), 1/vector.magnitude)
@@ -149,8 +146,8 @@ const drawVector = (vector, start= new Vector([0,0]) ) =>{
 }
 
 const drawMatrix = (matrix) =>{
-    matrix.rows.forEach((value)=>{
-        drawVector(value)
+    matrix.rows.forEach((vector)=>{
+        drawVector(vector)
     })
 }
 
@@ -199,7 +196,7 @@ const animateTransform = (frameArray) =>{
     const frameRate = 24
     for(let i=0; i<frameArray.length; i++){
         setTimeout(()=>{
-            clearCanvas("white")
+            clearCanvas()
             drawImageFromMatrix(frameArray[i])
         }, 1000/frameRate)
     }
@@ -246,35 +243,34 @@ const createTransformFrames = () =>{
 }
 
 const drawImageFromFile = (source) =>{
-    // const canvas = document.getElementById("canvas")
-    // const ctx = canvas.getContext("2d")
     const image = new Image()
     image.src= source
     image.onload = () =>{
-        ctx.drawImage(image, 0, 0)
-        const pixelMatrix = pixelsToMatrix(getCanvasPixels())
-        drawImageFromMatrix(pixelMatrix)
-        const imageMat = pixelsToMatrix(getCanvasPixels())
-        console.log(imageMat)
-        const transformed = transformMatrix(transform1, imageMat)
-        console.log(transformed)
-        drawImageFromMatrix(transformed)
+        const scaledWidth = (image.naturalWidth / canvasSize) * scale
+        const scaledHeight = (image.naturalHeight / canvasSize) * scale
+        ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight)
+        drawAxes()
     }
     
 }
 
 const getCanvasPixels = () =>{
-    // const canvas = document.getElementById("canvas")
-    // const ctx = canvas.getContext("2d")
+    //getImageData does not use transformed ctx for coords
+    //so (0,0) in this case = (-origin,-origin) on transformed ctx
     const imageData = ctx.getImageData(0,0,canvasSize,canvasSize)
     return imageData
 }
 
 const pixelsToMatrix = (imageData) =>{
+    //treat each 1D array element as a 2D vector with an associated rgba value
+    //ex. first four elements [0,0,0,255...] => vector at (0,0) with rgba value (0,0,0,255)
     tempVectorArray = []
-    for(let i=0; i<imageData.data.length; i+=4){
-        const pixelX = (i / 4) % imageData.width
-        const pixelY = Math.floor( (i / 4) / imageData.height )
+    const imageLength = imageData.data.length
+    const lowerBound = origin * -4
+    const upperBound = imageLength - (Math.floor(canvasSize / 2) * 4)
+    for(let i=lowerBound; i<upperBound; i+=4){
+        const pixelX = (( i / 4 ) % canvasSize) - origin
+        const pixelY = Math.ceil( ( i / 4 ) / canvasSize ) + (lowerBound / 4)
         tempVectorArray.push(
             new Vector(
                 [pixelX, 
@@ -291,17 +287,31 @@ const pixelsToMatrix = (imageData) =>{
 }
 
 const drawImageFromMatrix = (matrix) =>{
-    // const canvas = document.getElementById("canvas")
-    // const ctx = canvas.getContext("2d")
     const imageDataObject = ctx.createImageData(canvasSize, canvasSize)
-    matrix.rows.map((vector)=>{
-        const index = 4 * (vector.x + (canvasSize * vector.y))
-        imageDataObject.data[index] = vector.rgba[0]
-        imageDataObject.data[index + 1] = vector.rgba[1]
-        imageDataObject.data[index + 2] = vector.rgba[2]
-        imageDataObject.data[index + 3] = 255
+    //let pixels = []
+    matrix.rows.forEach((vector)=>{
+        const pixel = 4 * (vector.x + origin + (canvasSize * (vector.y + origin)))
+        imageDataObject.data[pixel] = vector.rgba[0]
+        imageDataObject.data[pixel + 1] = vector.rgba[1]
+        imageDataObject.data[pixel + 2] = vector.rgba[2]
+        imageDataObject.data[pixel + 3] = vector.rgba[3]
+        //pixels.push([pixel, vector.x, vector.y])
     })
+    //console.log(pixels)
+    //console.log(imageDataObject)
     ctx.putImageData(imageDataObject, 0, 0)
+}
+
+const drawAxes = () =>{
+    const length = Math.floor(canvasSize / 2)
+    const axesMatrix = new Matrix([
+        new Vector([0,length]),
+        new Vector([length, 0]),
+        new Vector([0, -length]),
+        new Vector([-length, 0])
+    ])
+    
+    drawMatrix(axesMatrix)
 }
 
 document.getElementById("canvas").height = canvasSize
@@ -314,8 +324,3 @@ const grid = new Matrix([
     ])
 
 drawImageFromFile("palm.png")
-
-const transform1 = new Matrix([
-    new Vector([1, 0]),
-    new Vector([0, 1])
-    ])
