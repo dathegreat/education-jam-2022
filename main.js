@@ -29,7 +29,7 @@ const transformVector = (a, b) =>{
     )
 }
 
-const transformMatrix = (a, b) =>{
+const transformMatrix = async (a, b) =>{
     //takes a 2x2 transformation matrix and an nx2 matrix
     //returns an nx2 matrix
     const transformedArray = b.rows.map((vector)=>{
@@ -216,7 +216,7 @@ const handleMatrixInput = () =>{
     return transformationMatrix
 }
 
-const createTransformFrames = () =>{
+const createTransformFrames = async () =>{
     //take a transformation matrix from the user and generate
     //a list of interpolated "frames" between the identity matrix
     //and the matrix with the transform applied
@@ -230,16 +230,25 @@ const createTransformFrames = () =>{
     const tweened10 = tweenValues(0, transformationMatrix.rows[1].array[0], steps)
     const tweened11 = tweenValues(1, transformationMatrix.rows[1].array[1], steps)
     let tweenedFrames = []
+    await createProgressBar(steps)
+    console.time()
     for(let i=0; i<=steps; i++){
-        const tweenedTransform = new Matrix([
-            new Vector( [tweened00[i], tweened01[i]] ),
-            new Vector( [tweened10[i], tweened11[i]] )
-        ])
-        tweenedFrames.push( 
-            transformMatrix(tweenedTransform, canvasMatrix)
-        )
+        setTimeout(async ()=>{
+            const tweenedTransform = new Matrix([
+                new Vector( [tweened00[i], tweened01[i]] ),
+                new Vector( [tweened10[i], tweened11[i]] )
+            ])
+            tweenedFrames.push( 
+                await transformMatrix(tweenedTransform, canvasMatrix)
+            )
+            await updateProgressBar(i)
+
+            if(i == steps){
+                console.log("animated")
+                animateTransform( tweenedFrames )
+            }
+        })
     }
-    animateTransform( tweenedFrames ) 
 }
 
 const drawImageFromFile = (source) =>{
@@ -251,7 +260,6 @@ const drawImageFromFile = (source) =>{
         ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight)
         drawAxes()
     }
-    
 }
 
 const getCanvasPixels = () =>{
@@ -314,9 +322,31 @@ const drawAxes = () =>{
     drawMatrix(axesMatrix)
 }
 
+const createProgressBar = async (maxValue) =>{
+    const bar = document.createElement("div")
+    bar.id = "barContainer"
+    bar.innerHTML= `
+    <label for="bar">Calculating:</label>
+    <progress id="bar" value="0" max="${maxValue}"></progress>
+    `
+    document.getElementById("canvas").insertAdjacentElement("afterend", bar)
+}
+
+const updateProgressBar = async (value) =>{
+    const bar = document.getElementById("bar")
+    bar.value = value
+    if(bar.max != null && value >= bar.max){
+        document.getElementById("barContainer").remove()
+    }
+}
+
+const handleClick = async () =>{
+    await createTransformFrames()
+}
+
 document.getElementById("canvas").height = canvasSize
 document.getElementById("canvas").size = canvasSize
-document.getElementById("matrixSubmit").addEventListener("click", createTransformFrames)
+document.getElementById("matrixSubmit").addEventListener("click", handleClick)
 const ctx = getContext()
 const grid = new Matrix([
     new Vector([scale, 0]),
