@@ -1,14 +1,18 @@
 /*
     This program seeks to make matrix transformations more intuitive
-    by visually demonstrating how transforms affect the R2 vector space. 
-    Users can input any 2x2 matrix transform they please, and the program 
-    animates a transform from the R2 basis to a vector space defined by 
-    the new transformation matrix
+    by visually and audibly demonstrating how transforms affect the R2 
+    vector space. Users can input any 2x2 matrix transform they please, 
+    and the program animates a transform from the R2 basis to a vector 
+    space defined by the new transformation matrix
     e.g.
     span [1, 0]  becomes  span [0, 1 ]
          [0, 1]                [-1, 0]
     The space is represented by an image, with each pixel defined as a
     vector in R2 with an associated rgba value. 
+    Additionally, four oscillators represent the transform matrix's four
+    elements. As the transformation animates, the oscillators change in
+    pitch to represent their element's value rising or falling. This
+    harmony can give a chord-like structure to transformations
 */
 
 class Vector {
@@ -169,10 +173,15 @@ const tweenVectors = (a, b, steps) => {
 const animateTransform = (frameArray) => {
 	//iterate through tweened frames array and draw them
 	const frameRate = 24;
+	createSoundRamp();
 	for (let i = 0; i < frameArray.length; i++) {
 		setTimeout(() => {
 			clearCanvas();
 			drawImageFromMatrix(frameArray[i]);
+			sound.stepToNextNote();
+			if (i >= frameArray.length - 1) {
+				sound.globalStop();
+			}
 		}, 1000 / frameRate);
 	}
 };
@@ -203,6 +212,7 @@ const createTransformFrames = async () => {
 	const tweened01 = tweenValues(0, transformationMatrix.rows[0].y, steps);
 	const tweened10 = tweenValues(0, transformationMatrix.rows[1].x, steps);
 	const tweened11 = tweenValues(1, transformationMatrix.rows[1].y, steps);
+	sound.tweenedNotes = [tweened00, tweened01, tweened10, tweened11];
 	let tweenedFrames = new Array(steps);
 	await createProgressBar(steps);
 	console.time();
@@ -218,7 +228,7 @@ const createTransformFrames = async () => {
 			);
 			await updateProgressBar(i);
 
-			if (i == steps) {
+			if (i >= steps) {
 				console.timeEnd();
 				animateTransform(tweenedFrames);
 			}
@@ -312,7 +322,9 @@ const createProgressBar = async (maxValue) => {
     <label for="bar">Calculating:</label>
     <progress id="bar" value="0" max="${maxValue}"></progress>
     `;
-	document.getElementById("canvas").insertAdjacentElement("afterend", bar);
+	document
+		.getElementById("matrixSubmit")
+		.insertAdjacentElement("afterend", bar);
 };
 
 const updateProgressBar = async (value) => {
@@ -323,22 +335,132 @@ const updateProgressBar = async (value) => {
 	}
 };
 
+class Sound {
+	constructor(
+		oscillatorNumber = 4,
+		types = ["square", "square", "square", "square"],
+		pitches = [523.25, 329.63, 98.0, 32.7]
+	) {
+		this.decayTime = 1; //second
+		this.noteLength = 0.05; //second
+		this.maxVolume = 0.5;
+
+		this.oscillators = new Array(oscillatorNumber);
+		this.context = new AudioContext();
+		this.gain = this.context.createGain();
+		this.filter = this.context.createBiquadFilter();
+		this.filter.type = "lowpass";
+		this.filter.frequency.value = 700;
+		this.panLeft = this.context.createStereoPanner();
+		this.panLeft.pan.value = -1;
+		this.panRight = this.context.createStereoPanner();
+		this.panRight.pan.value = 1;
+
+		this.panLeft.connect(this.gain);
+		this.panRight.connect(this.gain);
+		this.gain.connect(this.filter);
+		this.filter.connect(this.context.destination);
+		this.gain.gain.value = this.maxVolume;
+
+		this.oscVolumes = new Array(oscillatorNumber);
+
+		this.fundamentals = pitches;
+
+		this.tweenedNotes = [];
+		this.currentNoteStep = 0;
+
+		for (let i = 0; i < oscillatorNumber; i++) {
+			this.oscillators[i] = this.context.createOscillator();
+			this.oscillators[i].type = types[i];
+			this.oscillators[i].frequency.value = pitches[i];
+			this.oscVolumes[i] = this.context.createGain();
+			this.oscVolumes[i].gain.value = this.maxVolume;
+			this.oscillators[i].connect(this.oscVolumes[i]);
+			if (i % 2 == 0) {
+				this.oscVolumes[i].connect(this.panLeft);
+			} else {
+				this.oscVolumes[i].connect(this.panRight);
+			}
+		}
+	}
+
+	globalStart() {
+		this.oscillators.forEach((oscillator) => {
+			oscillator.start();
+		});
+	}
+
+	globalStop() {
+		this.gain.gain.exponentialRampToValueAtTime(
+			0.0001,
+			this.context.currentTime + this.decayTime
+		);
+		this.currentNoteStep = 0;
+	}
+
+	noteStop(gainNode) {
+		gainNode.gain.exponentialRampToValueAtTime(
+			0.0001,
+			this.context.currentTime + this.noteLength
+		);
+	}
+
+	noteStart(gainNode) {
+		gainNode.gain.exponentialRampToValueAtTime(
+			this.maxVolume,
+			this.context.currentTime + this.noteLength
+		);
+	}
+
+	stepToNextNote() {
+		for (let i = 0; i < this.oscillators.length; i++) {
+			const multiplier = Math.ceil(
+				this.tweenedNotes[i][this.currentNoteStep] * 12
+			);
+			const newNote = this.calculateNextNote(
+				this.fundamentals[i],
+				multiplier
+			);
+			if (newNote != this.fundamentals[i]) {
+			}
+			this.oscillators[i].frequency.value = newNote;
+		}
+		this.currentNoteStep++;
+	}
+
+	calculateNextNote(note, multiplier) {
+		return note * Math.pow(2, multiplier / 12);
+	}
+}
+
+const createSoundRamp = async () => {
+	if (sound.context.state != "running") {
+		sound.globalStart();
+	} else {
+		sound.gain.gain.exponentialRampToValueAtTime(
+			sound.maxVolume,
+			sound.context.currentTime + sound.decayTime
+		);
+	}
+};
+
 const handleClick = async () => {
 	await createTransformFrames();
 };
 
-const handleImageInput = (e) =>{
-  const reader = new FileReader();
-    reader.onload = () =>{
-      drawImageFromFile(reader.result)
-    }
-    reader.readAsDataURL(e.target.files[0]);
-
-}
+const handleImageInput = (e) => {
+	const reader = new FileReader();
+	reader.onload = () => {
+		drawImageFromFile(reader.result);
+		userImage = reader.result;
+	};
+	reader.readAsDataURL(e.target.files[0]);
+};
 
 const scale = 500;
 const canvasSize = 500;
 const origin = Math.floor(canvasSize / 2);
+const sound = new Sound();
 
 document.getElementById("canvas").height = canvasSize;
 document.getElementById("canvas").size = canvasSize;
@@ -347,12 +469,19 @@ document.getElementById("grid").addEventListener("change", () => {
 	gridEnabled = document.getElementById("grid").checked;
 	drawImageFromFile(userImage);
 });
-document.getElementById("imageInput").addEventListener("change", handleImageInput)
+document.getElementById("sound").addEventListener("change", () => {
+	const soundEnabled = document.getElementById("sound").checked;
+	sound.maxVolume = soundEnabled ? 0.5 : 0.0001;
+});
+
+document
+	.getElementById("imageInput")
+	.addEventListener("change", handleImageInput);
 const ctx = getContext();
 const grid = new Matrix([
 	new Vector([scale / 10, 0]),
 	new Vector([0, scale / 10]),
 ]);
 let gridEnabled = false;
-const userImage = "palm.png";
+let userImage = "palm.png";
 drawImageFromFile(userImage);

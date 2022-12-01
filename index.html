@@ -1,26 +1,47 @@
 <!DOCTYPE html>
 <head>
 </head>
-<body>
-    <center>
-        <canvas id="canvas" width="500px" height="500px" style="border: 1px solid black"></canvas>
-        <div id="matrixInput">
-            <label for="[0,0]">[0,0]</label>
-            <input type="text" id="[0,0]" name="[0,0]"><br><br>
-            <label for="[0,1]">[0,1]</label>
-            <input type="text" id="[0,1]" name="[0,1]"><br><br>
-            <label for="[1,0]">[1,0]</label>
-            <input type="text" id="[1,0]" name="[1,0]"><br><br>
-            <label for="[1,1]">[1,1]</label>
-            <input type="text" id="[1,1]" name="[1,1]"><br><br>
-            <button id="matrixSubmit">Transform</button>
+<body class="background">
+    <header class="bold-text fancy-border-bottom">
+        <h1>Matrix Visualizer 9000</h1>
+    </header>
+    <div class="wrapper">
+        <canvas id="canvas" width="500px" height="500px"></canvas>
+        <div class="space column light-background">
+            <div id="matrixInput" class="column top center">
+                <div class="row center">
+                    <label for="[0,0]">[0,0]</label>
+                    <input type="text" id="[0,0]" name="[0,0]" size="1">
+                    <label for="[0,1]">[0,1]</label>
+                    <input type="text" id="[0,1]" name="[0,1]" size="1">
+                </div>
+                <div class="row center">
+                    <label for="[1,0]">[1,0]</label>
+                    <input type="text" id="[1,0]" name="[1,0]" size="1">
+                    <label for="[1,1]">[1,1]</label>
+                    <input type="text" id="[1,1]" name="[1,1]" size="1">
+                </div>
+                <button id="matrixSubmit">Transform</button>
+            </div>
+            <div id="options" class="column bottom">
+                <div class="row">
+                    <label for="grid"> Enable Grid </label><br>
+                    <input type="checkbox" id="grid" name="grid" value="true">
+                </div>
+                <div class="row">
+                    <label for="sound"> Enable Sound </label><br>
+                    <input type="checkbox" id="sound" name="sound" value="true" checked="true">
+                </div>
+                <div class="column">
+                    <label for="imageInput">Upload Image</label> 
+                    <input id="imageInput" type="file" accept="image/*">
+                </div>
+            </div>
         </div>
-        <div id="options">
-            <label for="grid"> Enable Grid </label><br>
-            <input type="checkbox" id="grid" name="grid" value="true">
-            <label for="imageInput">Upload Image</label> 
-            <input id="imageInput" type="file" accept="image/*">
-        </div>
-    </center>
+    </div>
+    <footer class="subtle-text fancy-border-top">
+        <p>a D.A. creation</p>
+    </footer>
     <script src="main.js"></script>
+    <link rel="stylesheet" href="styles.css">
 </body>
